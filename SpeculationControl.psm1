@@ -187,7 +187,7 @@
             Write-Host "Windows OS support for kernel VA shadow is enabled:"$kvaShadowEnabled -ForegroundColor $(If ($kvaShadowEnabled) { [System.ConsoleColor]::Green } Else { [System.ConsoleColor]::Red })
 
             if ($kvaShadowEnabled) {
-                Write-Host "Windows OS support for PCID optimization is enabled:"$kvaShadowPcidEnabled -ForegroundColor $(If ($kvaShadowPcidEnabled) { [System.ConsoleColor]::Green } Else { [System.ConsoleColor]::Red })
+                Write-Host "Windows OS support for PCID performance optimization is enabled: $kvaShadowPcidEnabled [not required for security]" -ForegroundColor $(If ($kvaShadowPcidEnabled) { [System.ConsoleColor]::Green } Else { [System.ConsoleColor]::Blue })
             }
         }
 
@@ -211,8 +211,25 @@
             $actions += "Install the latest available updates for Windows with support for speculation control mitigations."
         }
 
-        if ($btiWindowsSupportEnabled -eq $false -or ($kvaShadowRequired -eq $true -and $kvaShadowEnabled -eq $false)) {
-            $actions += "Follow the guidance for enabling Windows support for speculation control mitigations are described in https://support.microsoft.com/help/4072698"
+        if (($btiHardwarePresent -eq $true -and $btiWindowsSupportEnabled -eq $false) -or ($kvaShadowRequired -eq $true -and $kvaShadowEnabled -eq $false)) {
+            $guidanceUri = ""
+            $guidanceType = ""
+
+            
+            $os = Get-WmiObject Win32_OperatingSystem
+
+            if ($os.ProductType -eq 1) {
+                # Workstation
+                $guidanceUri = "https://support.microsoft.com/help/4073119"
+                $guidanceType = "Client"
+            }
+            else {
+                # Server/DC
+                $guidanceUri = "https://support.microsoft.com/help/4072698"
+                $guidanceType = "Server"
+            }
+
+            $actions += "Follow the guidance for enabling Windows $guidanceType support for speculation control mitigations described in $guidanceUri"
         }
 
         if ($actions.Length -gt 0) {
