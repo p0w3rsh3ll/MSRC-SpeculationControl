@@ -51,7 +51,7 @@
 
         $retval = $ntdll::NtQuerySystemInformation($systemInformationClass, $systemInformationPtr, $systemInformationLength, $returnLengthPtr)
 
-        if ($retval -eq 0xc0000003) {
+        if ($retval -eq 0xc0000003 -or $retval -eq 0xc0000002) {
             # fallthrough
         }
         elseif ($retval -ne 0) {
@@ -153,7 +153,7 @@
 
         $retval = $ntdll::NtQuerySystemInformation($systemInformationClass, $systemInformationPtr, $systemInformationLength, $returnLengthPtr)
 
-        if ($retval -eq 0xc0000003) {
+        if ($retval -eq 0xc0000003 -or $retval -eq 0xc0000002) {
         }
         elseif ($retval -ne 0) {
             throw (("Querying kernel VA shadow information failed with error {0:X8}" -f $retval))
@@ -196,6 +196,36 @@
         $object | Add-Member -MemberType NoteProperty -Name KVAShadowWindowsSupportPresent -Value $kvaShadowPresent
         $object | Add-Member -MemberType NoteProperty -Name KVAShadowWindowsSupportEnabled -Value $kvaShadowEnabled
         $object | Add-Member -MemberType NoteProperty -Name KVAShadowPcidEnabled -Value $kvaShadowPcidEnabled
+
+        #
+        # Provide guidance as appropriate.
+        #
+
+        $actions = @()
+        
+        if ($btiHardwarePresent -eq $false) {
+            $actions += "Install BIOS/firmware update provided by your device OEM that enables hardware support for the branch target injection mitigation."
+        }
+
+        if ($btiWindowsSupportPresent -eq $false -or $kvaShadowPresent -eq $false) {
+            $actions += "Install the latest available updates for Windows with support for speculation control mitigations."
+        }
+
+        if ($btiWindowsSupportEnabled -eq $false -or ($kvaShadowRequired -eq $true -and $kvaShadowEnabled -eq $false)) {
+            $actions += "Follow the guidance for enabling Windows support for speculation control mitigations are described in https://support.microsoft.com/help/4072698"
+        }
+
+        if ($actions.Length -gt 0) {
+
+            Write-Host
+            Write-Host "Suggested actions" -ForegroundColor Cyan
+            Write-Host 
+
+            foreach ($action in $actions) {
+                Write-Host " *" $action
+            }
+        }
+
 
         return $object
 
