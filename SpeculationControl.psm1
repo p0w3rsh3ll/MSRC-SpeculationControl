@@ -38,6 +38,7 @@
         #
 
         Write-Host "Speculation control settings for CVE-2017-5715 [branch target injection]" -ForegroundColor Cyan
+        Write-Host "For more information about the output below, please refer to https://support.microsoft.com/en-in/help/4074629" -ForegroundColor Cyan
         Write-Host
 
         $btiHardwarePresent = $false
@@ -121,10 +122,16 @@
 
         $cpu = Get-WmiObject Win32_Processor
 
-        if ($cpu.Manufacturer -eq "AuthenticAMD") {
+        if ($cpu -is [array]) {
+            $cpu = $cpu[0]
+        }
+
+        $manufacturer = $cpu.Manufacturer
+
+        if ($manufacturer -eq "AuthenticAMD") {
             $kvaShadowRequired = $false
         }
-        elseif ($cpu.Manufacturer -eq "GenuineIntel") {
+        elseif ($manufacturer -eq "GenuineIntel") {
             $regex = [regex]'Family (\d+) Model (\d+) Stepping (\d+)'
             $result = $regex.Match($cpu.Description)
             
@@ -145,7 +152,7 @@
             }
         }
         else {
-            throw ("Unsupported processor manufacturer: {0}" -f $cpu.Manufacturer)
+            throw ("Unsupported processor manufacturer: {0}" -f $manufacturer)
         }
 
         [System.UInt32]$systemInformationClass = 196
@@ -187,7 +194,7 @@
             Write-Host "Windows OS support for kernel VA shadow is enabled:"$kvaShadowEnabled -ForegroundColor $(If ($kvaShadowEnabled) { [System.ConsoleColor]::Green } Else { [System.ConsoleColor]::Red })
 
             if ($kvaShadowEnabled) {
-                Write-Host "Windows OS support for PCID performance optimization is enabled: $kvaShadowPcidEnabled [not required for security]" -ForegroundColor $(If ($kvaShadowPcidEnabled) { [System.ConsoleColor]::Green } Else { [System.ConsoleColor]::Blue })
+                Write-Host "Windows OS support for PCID performance optimization is enabled: $kvaShadowPcidEnabled [not required for security]" -ForegroundColor $(If ($kvaShadowPcidEnabled) { [System.ConsoleColor]::Green } Else { [System.ConsoleColor]::White })
             }
         }
 
