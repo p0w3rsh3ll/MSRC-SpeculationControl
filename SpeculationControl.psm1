@@ -127,41 +127,6 @@
         $kvaShadowEnabled = $false
         $kvaShadowPcidEnabled = $false
 
-        $cpu = Get-WmiObject Win32_Processor
-
-        if ($cpu -is [array]) {
-            $cpu = $cpu[0]
-        }
-
-        $manufacturer = $cpu.Manufacturer
-
-        if ($manufacturer -eq "AuthenticAMD") {
-            $kvaShadowRequired = $false
-        }
-        elseif ($manufacturer -eq "GenuineIntel") {
-            $regex = [regex]'Family (\d+) Model (\d+) Stepping (\d+)'
-            $result = $regex.Match($cpu.Description)
-            
-            if ($result.Success) {
-                $family = [System.UInt32]$result.Groups[1].Value
-                $model = [System.UInt32]$result.Groups[2].Value
-                $stepping = [System.UInt32]$result.Groups[3].Value
-                
-                if (($family -eq 0x6) -and 
-                    (($model -eq 0x1c) -or
-                     ($model -eq 0x26) -or
-                     ($model -eq 0x27) -or
-                     ($model -eq 0x36) -or
-                     ($model -eq 0x35))) {
-
-                    $kvaShadowRequired = $false
-                }
-            }
-        }
-        else {
-            throw ("Unsupported processor manufacturer: {0}" -f $manufacturer)
-        }
-
         [System.UInt32]$systemInformationClass = 196
         [System.UInt32]$systemInformationLength = 4
 
@@ -178,18 +143,62 @@
             [System.UInt32]$kvaShadowUserGlobalFlag = 0x02
             [System.UInt32]$kvaShadowPcidFlag = 0x04
             [System.UInt32]$kvaShadowInvpcidFlag = 0x08
+            [System.UInt32]$kvaShadowRequiredFlag = 0x10
+            [System.UInt32]$kvaShadowRequiredAvailableFlag = 0x20
 
             [System.UInt32]$flags = [System.UInt32][System.Runtime.InteropServices.Marshal]::ReadInt32($systemInformationPtr)
 
             $kvaShadowPresent = $true
             $kvaShadowEnabled = (($flags -band $kvaShadowEnabledFlag) -ne 0)
             $kvaShadowPcidEnabled = ((($flags -band $kvaShadowPcidFlag) -ne 0) -and (($flags -band $kvaShadowInvpcidFlag) -ne 0))
+            
+            if (($flags -band $kvaShadowRequiredAvailableFlag) -ne 0) {
+                $kvaShadowRequired = (($flags -band $kvaShadowRequiredFlag) -ne 0)
+            }
+            else {
+                $cpu = Get-WmiObject Win32_Processor
+
+                if ($cpu -is [array]) {
+                    $cpu = $cpu[0]
+                }
+
+                $manufacturer = $cpu.Manufacturer
+
+                if ($manufacturer -eq "AuthenticAMD") {
+                    $kvaShadowRequired = $false
+                }
+                elseif ($manufacturer -eq "GenuineIntel") {
+                    $regex = [regex]'Family (\d+) Model (\d+) Stepping (\d+)'
+                    $result = $regex.Match($cpu.Description)
+            
+                    if ($result.Success) {
+                        $family = [System.UInt32]$result.Groups[1].Value
+                        $model = [System.UInt32]$result.Groups[2].Value
+                        $stepping = [System.UInt32]$result.Groups[3].Value
+                
+                        if (($family -eq 0x6) -and 
+                            (($model -eq 0x1c) -or
+                             ($model -eq 0x26) -or
+                             ($model -eq 0x27) -or
+                             ($model -eq 0x36) -or
+                             ($model -eq 0x35))) {
+
+                            $kvaShadowRequired = $false
+                        }
+                    }
+                }
+                else {
+                    throw ("Unsupported processor manufacturer: {0}" -f $manufacturer)
+                }
+            }
 
             if ($Quiet -ne $true -and $PSBoundParameters['Verbose']) {
                 Write-Host "KvaShadowEnabled             :" (($flags -band $kvaShadowEnabledFlag) -ne 0)
                 Write-Host "KvaShadowUserGlobal          :" (($flags -band $kvaShadowUserGlobalFlag) -ne 0)
                 Write-Host "KvaShadowPcid                :" (($flags -band $kvaShadowPcidFlag) -ne 0)
                 Write-Host "KvaShadowInvpcid             :" (($flags -band $kvaShadowInvpcidFlag) -ne 0)
+                Write-Host "KvaShadowRequired            :" $kvaShadowRequired
+                Write-Host "KvaShadowRequiredAvailable   :" (($flags -band $kvaShadowRequiredAvailableFlag) -ne 0)
             }
         }
         
@@ -277,33 +286,33 @@
 # SIG # Begin signature block
 # MIIdhgYJKoZIhvcNAQcCoIIddzCCHXMCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUwR7vA4PwbwNf72tRfxU33LWw
-# 3xagghhUMIIEwjCCA6qgAwIBAgITMwAAAMEJ+AJBu02q3AAAAAAAwTANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU9yJe6jiIB7o/KQLVENCuekUd
+# 5BWgghhUMIIEwjCCA6qgAwIBAgITMwAAAL+RbPt8GiTgIgAAAAAAvzANBgkqhkiG
 # 9w0BAQUFADB3MQswCQYDVQQGEwJVUzETMBEGA1UECBMKV2FzaGluZ3RvbjEQMA4G
 # A1UEBxMHUmVkbW9uZDEeMBwGA1UEChMVTWljcm9zb2Z0IENvcnBvcmF0aW9uMSEw
-# HwYDVQQDExhNaWNyb3NvZnQgVGltZS1TdGFtcCBQQ0EwHhcNMTYwOTA3MTc1ODUw
-# WhcNMTgwOTA3MTc1ODUwWjCBsjELMAkGA1UEBhMCVVMxEzARBgNVBAgTCldhc2hp
+# HwYDVQQDExhNaWNyb3NvZnQgVGltZS1TdGFtcCBQQ0EwHhcNMTYwOTA3MTc1ODQ5
+# WhcNMTgwOTA3MTc1ODQ5WjCBsjELMAkGA1UEBhMCVVMxEzARBgNVBAgTCldhc2hp
 # bmd0b24xEDAOBgNVBAcTB1JlZG1vbmQxHjAcBgNVBAoTFU1pY3Jvc29mdCBDb3Jw
 # b3JhdGlvbjEMMAoGA1UECxMDQU9DMScwJQYDVQQLEx5uQ2lwaGVyIERTRSBFU046
-# MTJFNy0zMDY0LTYxMTIxJTAjBgNVBAMTHE1pY3Jvc29mdCBUaW1lLVN0YW1wIFNl
-# cnZpY2UwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCnQx/5lyl8yUKs
-# OCe7goaBSbYZRGLqqBkrgKhq8dH8OM02K+bXkjkBBc3oxkLyHPwFN5BUpQQY9rEG
-# ywPRQNdZs+ORWsZU5DRjq+pmFIB+8mMDl9DoDh9PHn0d+kqLCjTpzeMKMY3OFLCB
-# tZM0mUmAyFGtDbAaT+V/5pR7TFcWohavrNNFERDbFL1h3g33aRN2IS5I0DRISNZe
-# +o5AvedZa+BLADFpBegnHydhbompjhg5oH7PziHYYKnSZB/VtGD9oPcte8fL5xr3
-# zQ/v8VbQLSo4d2Y7yDOgUaeMgguDWFQk/BTyIhAMi2WYLRr1IzjUWafUWXrRAejc
-# H4/LGxGfAgMBAAGjggEJMIIBBTAdBgNVHQ4EFgQU5Wc2VV+w+VLFrEvWbjW/iDqt
-# Ra8wHwYDVR0jBBgwFoAUIzT42VJGcArtQPt2+7MrsMM1sw8wVAYDVR0fBE0wSzBJ
+# NTdDOC0yRDE1LTFDOEIxJTAjBgNVBAMTHE1pY3Jvc29mdCBUaW1lLVN0YW1wIFNl
+# cnZpY2UwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCt7X+GwPaidVcV
+# TRT2yohV/L1dpTMCvf4DHlCY0GUmhEzD4Yn22q/qnqZTHDd8IlI/OHvKhWC9ksKE
+# F+BgBHtUQPSg7s6+ZXy69qX64r6m7X/NYizeK31DsScLsDHnqsbnwJaNZ2C2u5hh
+# cKsHvc8BaSsv/nKlr6+eg2iX2y9ai1uB1ySNeunEtdfchAr1U6Qb7AJHrXMTdKl8
+# ptLov67aFU0rRRMwQJOWHR+o/gQa9v4z/f43RY2PnMRoF7Dztn6ditoQ9CgTiMdS
+# MtsqFWMAQNMt5bZ8oY1hmgkSDN6FwTjVyUEE6t3KJtgX2hMHjOVqtHXQlud0GR3Z
+# LtAOMbS7AgMBAAGjggEJMIIBBTAdBgNVHQ4EFgQU5GwaORrHk1i0RjZlB8QAt3kX
+# nBEwHwYDVR0jBBgwFoAUIzT42VJGcArtQPt2+7MrsMM1sw8wVAYDVR0fBE0wSzBJ
 # oEegRYZDaHR0cDovL2NybC5taWNyb3NvZnQuY29tL3BraS9jcmwvcHJvZHVjdHMv
 # TWljcm9zb2Z0VGltZVN0YW1wUENBLmNybDBYBggrBgEFBQcBAQRMMEowSAYIKwYB
 # BQUHMAKGPGh0dHA6Ly93d3cubWljcm9zb2Z0LmNvbS9wa2kvY2VydHMvTWljcm9z
 # b2Z0VGltZVN0YW1wUENBLmNydDATBgNVHSUEDDAKBggrBgEFBQcDCDANBgkqhkiG
-# 9w0BAQUFAAOCAQEANDgLKXRowe/Nzu4x3vd07BG2sXKl3uYIgQDBrw83AWJ0nZ15
-# VwL0KHe4hEkjNVn16/j0qOADdl5AS0IemYRZ3Ro9Qexf4jgglAXXm+k+bbHkYfOZ
-# 3g+pFhs5+MF6vY6pWB7IHmkJhzs1OHn1rFNBNYVO12DhuPYYr//7KIN52jd6I86o
-# yM+67V1W8ku8SsbnPz2gBDoYIeHkzaSZCoX2+i2eL5EL3d8TEXXqKjnxh5xEcdPz
-# BuVnt3VIu8SjWdyy/ulTzBy+jRFLcTyfGQm19mlerWcwfV271WWbhTpgxAQugy9o
-# 6PM4DR9HIEz6vRUYyIfX09FxoX5pENTGzssKyDCCBgEwggPpoAMCAQICEzMAAADE
+# 9w0BAQUFAAOCAQEAjt62jcZ+2YBqm7RKit827DRU9OKioi6HEERT0X0bL+JjUTu3
+# 7k4piPcK3J/0cfktWuPjrYSuySa/NbkmlvAhQV4VpoWxipx3cZplF9HK9IH4t8AD
+# YDxUI5u1xb2r24aExGIzWY+1uH92bzTKbAjuwNzTMQ1z10Kca4XXPI4HFZalXxgL
+# fbjCkV3IKNspU1TILV0Dzk0tdKAwx/MoeZN1HFcB9WjzbpFnCVH+Oy/NyeJOyiNE
+# 4uT/6iyHz1+XCqf2nIrV/DXXsJYKwifVlOvSJ4ZrV40MYucq3lWQuKERfXivLFXl
+# dKyXQrS4eeToRPSevRisc0GBYuZczpkdeN5faDCCBgEwggPpoAMCAQICEzMAAADE
 # 6Yn4eoFQ6f8AAAAAAMQwDQYJKoZIhvcNAQELBQAwfjELMAkGA1UEBhMCVVMxEzAR
 # BgNVBAgTCldhc2hpbmd0b24xEDAOBgNVBAcTB1JlZG1vbmQxHjAcBgNVBAoTFU1p
 # Y3Jvc29mdCBDb3Jwb3JhdGlvbjEoMCYGA1UEAxMfTWljcm9zb2Z0IENvZGUgU2ln
@@ -413,24 +422,24 @@
 # MCYGA1UEAxMfTWljcm9zb2Z0IENvZGUgU2lnbmluZyBQQ0EgMjAxMQITMwAAAMTp
 # ifh6gVDp/wAAAAAAxDAJBgUrDgMCGgUAoIGwMBkGCSqGSIb3DQEJAzEMBgorBgEE
 # AYI3AgEEMBwGCisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJ
-# BDEWBBStqR1s0sUWJfvOG0zKFkaSGv/laDBQBgorBgEEAYI3AgEMMUIwQKAWgBQA
+# BDEWBBQMrDuJQFoM+M8gHDvWq3d/BPXA9TBQBgorBgEEAYI3AgEMMUIwQKAWgBQA
 # UABvAHcAZQByAFMAaABlAGwAbKEmgCRodHRwOi8vd3d3Lm1pY3Jvc29mdC5jb20v
-# UG93ZXJTaGVsbCAwDQYJKoZIhvcNAQEBBQAEggEAIRWiDqQUjW1admGZg94JNJXa
-# LpjvgC16ws9Txk3qyCa2ymalxt70czTTy+N/wD2A/HKSs9BIWFWc8VsCKamJPMj+
-# C7t2C4oF1O/b6LBG7ROXVLsUN64SymdjBeo+WXdpvW/7KlgB3xVAyJjkqA7lJZ7p
-# r3QVEhj9SUIBmFi8YiFtuTHJ/CSIggdnIkzypVrTViGj+agV6xDzsQmvCeO2iVCl
-# fovTaXBiBd+El+B3SXK7QhdjcpXrW34jcfhvPS5RUMHj1SwRcwsBTaYylijFQ4tR
-# 5e7MMND3gIF2vWly8sk1i3Qhi2TwfBAorBO2edliP+kUiUNGrEdJ21Ais/XwXaGC
+# UG93ZXJTaGVsbCAwDQYJKoZIhvcNAQEBBQAEggEAN6o0ZLMu0S8JwcUPbewP9oi3
+# d+qjvOdNHGSc37oqVm2FTSlTS9pct5GrQ/X/XXrSE7FdbcFrHGuXZlwZIH8UkfgY
+# eVXTKhJy4mBv7yCEBqaMCgrTy5HYHjqwY5g3fqE6CYaH+FwfhECeonBfVNAJh2Is
+# 8bm/O/Ab6umpr2orKWde2uGhh4xWf7zVyR05Y5v+rHNBsBvu7Opp41vHJOmFk9vc
+# iFkzcijisCm6hcYt9mKZYVKmIudDr4CSvs0RknQJArAUR16ZYvyMnMbzsZQT7OPe
+# HoUTOKEyIu7gS1y05RKGkx68aVvkqnO9Blm10gZvGXsqjHPMl3DJBBKGQE3yc6GC
 # AigwggIkBgkqhkiG9w0BCQYxggIVMIICEQIBATCBjjB3MQswCQYDVQQGEwJVUzET
 # MBEGA1UECBMKV2FzaGluZ3RvbjEQMA4GA1UEBxMHUmVkbW9uZDEeMBwGA1UEChMV
 # TWljcm9zb2Z0IENvcnBvcmF0aW9uMSEwHwYDVQQDExhNaWNyb3NvZnQgVGltZS1T
-# dGFtcCBQQ0ECEzMAAADBCfgCQbtNqtwAAAAAAMEwCQYFKw4DAhoFAKBdMBgGCSqG
-# SIb3DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTE4MDIyNjIzMzAw
-# M1owIwYJKoZIhvcNAQkEMRYEFLHx+JScJx5NADTIxsBMYTD6y0avMA0GCSqGSIb3
-# DQEBBQUABIIBACe1D3fdzrQoApdkC0387bZMGv6jTyy08Pk5Z5zMBllGqbGP/+Ge
-# V7r34W9ttFr2QklBStgXHvFm81zodd4etBWhyldpv/ClraqoxAKAKQ9H8SlvkC9x
-# md24gnvKmzRkYzJwH+bi/FYMA7VF4XI4XZ/ninBcUbW4Hcii5lnKG+eQMP5xd83v
-# 7jldST/+LFaPAatc5kp8w+nywvEAPW9fGoNtYl5+ORDkF1KBR3hhwBjM1Yb1Bh6J
-# 9Vzyy+6+I+kMBtramLVVKO1mZ1AyIsP+JEx2ge7xhDFQfMHBFm2TSaKDyJl3a4Aw
-# HVaA4wGln78iSqLGuMxg+tMfUESv7wvDk5c=
+# dGFtcCBQQ0ECEzMAAAC/kWz7fBok4CIAAAAAAL8wCQYFKw4DAhoFAKBdMBgGCSqG
+# SIb3DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTE4MDMyNDAxMTYz
+# MlowIwYJKoZIhvcNAQkEMRYEFEY1vdUuPqGykP27sr+8AYrYS5UeMA0GCSqGSIb3
+# DQEBBQUABIIBADKwafhSM9XjHqLPUxQoiTHRTN0UJ3AxTHtxNcqMscrEcgCx63tj
+# k30l7laK6jrqB15uu7jCFZbMIBBON4sQD+BUSyZ0ntoRJLAc5S8BAKGV8cEpoOfj
+# cq00Xgi7xyfZVxPJM2uC1v348cxBf1VBGRuukbNxAuNGCRwYixvt9/X3oVm7aXo8
+# jSc0Uga7G7vNYARw7xWhnCzFnHpRhTli3DNWkMVmLS3KKKf5uArylOiqYuQskJ+m
+# 2x2+RIkaXlaA8J8bqQJvYgecSnuR/2tHhnLU3+ILFplDuR+UolyU1YP4BGLApr61
+# O2tLUY8KrtHRO+1b++asDpRzkEDgn3AK8ko=
 # SIG # End signature block
