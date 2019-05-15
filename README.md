@@ -14,6 +14,8 @@ It's difficult to follow and track changes made to the code.
 
 Just trying to follow changes.
 
+Be aware that there's an official GH repo https://github.com/Microsoft/SpeculationControl
+
 <a name="Credits"/>
 
 ## Credits
